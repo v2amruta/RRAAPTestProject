@@ -10,6 +10,7 @@ using System;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Http;
 using System.Linq;
+using Microsoft.Extensions.Logging;
 
 namespace Tests
 {
@@ -17,12 +18,13 @@ namespace Tests
     {
         RecommendationsController controller;
         Mock<IRecommendationsService> recommendationService = new Mock<IRecommendationsService>();
+        Mock<ILogger<RecommendationsController>> logger = new Mock<ILogger<RecommendationsController>>();
 
         #region Setup Controller context
         [SetUp]
         public void Initialization()
         {
-            controller = new RecommendationsController(recommendationService.Object);
+            controller = new RecommendationsController(recommendationService.Object, logger.Object);
             controller.ControllerContext = new ControllerContext();
             controller.ControllerContext.HttpContext = new DefaultHttpContext();
             controller.ControllerContext.HttpContext.Request.Scheme = "https";
@@ -63,14 +65,13 @@ namespace Tests
         }
 
         [Test]
-        public void Recommendations_ReturnsResponseWithDefultValues()
+        public void Recommendations_ReturnsNullResponse()
         {
             controller.ModelState.AddModelError("", "");
 
             var result = controller.NewRecommendations(It.IsAny<NewRecommendationRequest>());
 
-            Assert.AreEqual(0, result.RecommendationId);
-            Assert.AreEqual(0, result.VariationId);
+            Assert.IsNull(result);
         }
 
         #endregion Create recommendations
@@ -104,21 +105,21 @@ namespace Tests
         [Test]
         public void Recommendations_ReturnsRecommendationsByUrl()
         {
-            recommendationService.Setup(r => r.RecommendationsByUrl("https://developer.mozilla.org/en-US/")).Returns(GetListOfRecommendations().Where(i => i.Url == "https://developer.mozilla.org/en-US/").ToList());
+            recommendationService.Setup(r => r.RecommendationsByUrl("https://developer.mozilla.org/en-US/")).Returns(GetListOfRecommendations().Where(i => i.Url == "https://developer.mozilla.org/en-US/").SingleOrDefault());
 
             var result = controller.Recommendations("https://developer.mozilla.org/en-US/");
 
-            Assert.IsTrue(result.All(u => u.Url == "https://developer.mozilla.org/en-US/"));
+            Assert.IsTrue(result.Url == "https://developer.mozilla.org/en-US/");
         }
 
         [Test]
         public void Recommendations_ReturnsNoRecommendationsByUrl()
         {
-            recommendationService.Setup(r => r.RecommendationsByUrl("https://deals.maketecheasier.com/")).Returns(GetListOfRecommendations().Where(i => i.Url == "https://deals.maketecheasier.com/").ToList());
+            recommendationService.Setup(r => r.RecommendationsByUrl("https://deals.maketecheasier.com/")).Returns(GetListOfRecommendations().Where(i => i.Url == "https://deals.maketecheasier.com/").SingleOrDefault());
 
             var result = controller.Recommendations("https://deals.maketecheasier.com/");
 
-            Assert.IsTrue(result.Count == 0);
+            Assert.IsNull(result);
         }
 
         #endregion Retrive recommendations by url
@@ -166,22 +167,6 @@ namespace Tests
                 Variations = GetListOfVariations().Where(r => r.RecommendationId == 2).ToList(),
                 Id = 2
             });
-            recommendations.Add(new Recommendations()
-            {
-                Name = "recomm3",
-                Url = "https://www.v2solutions.com/blogs/",
-                Description = "",
-                Variations = GetListOfVariations().Where(r => r.RecommendationId == 3).ToList(),
-                Id = 3
-            });
-            recommendations.Add(new Recommendations()
-            {
-                Name = "recomm4",
-                Url = "https://developer.mozilla.org/en-US/",
-                Description = "",
-                Variations = GetListOfVariations().Where(r => r.RecommendationId == 4).ToList(),
-                Id = 4
-            });
 
             return recommendations;
         }
@@ -203,29 +188,17 @@ namespace Tests
         private List<Variations> GetListOfVariations()
         {
             return new List<Variations>(){
-                // new Variations(){Id=1, RecommendationId=1, Html="New content 1", DocumentPath="<div><div>Old content 1</div></div>"},
-                // new Variations(){Id=2, RecommendationId=1, Html="New content 2", DocumentPath="<div><div>Old content 2</div></div>"},
-                // new Variations(){Id=1, RecommendationId=2, Html="New content 12", DocumentPath="<div><div>Old content 12</div></div>"},
-                // new Variations(){Id=2, RecommendationId=2, Html="New content 22", DocumentPath="<div><div>Old content 22</div></div>"},
-                // new Variations(){Id=3, RecommendationId=2, Html="New content 32", DocumentPath="<div><div>Old content 32</div></div>"},
-                // new Variations(){Id=1, RecommendationId=3, Html="New content 13", DocumentPath="<div><div>Old content 13</div></div>"},
-                // new Variations(){Id=2, RecommendationId=3, Html="New content 23", DocumentPath="<div><div>Old content 23</div></div>"},
-                // new Variations(){Id=3, RecommendationId=3, Html="New content 33", DocumentPath="<div><div>Old content 33</div></div>"},
-                // new Variations(){Id=4, RecommendationId=3, Html="New content 43", DocumentPath="<div><div>Old content 43</div></div>"},
-                // new Variations(){Id=1, RecommendationId=4, Html="New content 14", DocumentPath="<div><div>Old content 14</div></div>"},
-                // new Variations(){Id=2, RecommendationId=4, Html="New content 24", DocumentPath="<div><div>Old content 24</div></div>"},
-
-                new Variations(){Id=1, RecommendationId=1},
-                new Variations(){Id=2, RecommendationId=1},
-                new Variations(){Id=1, RecommendationId=2},
-                new Variations(){Id=2, RecommendationId=2},
-                new Variations(){Id=3, RecommendationId=2},
-                new Variations(){Id=1, RecommendationId=3},
-                new Variations(){Id=2, RecommendationId=3},
-                new Variations(){Id=3, RecommendationId=3},
-                new Variations(){Id=4, RecommendationId=3},
-                new Variations(){Id=1, RecommendationId=4},
-                new Variations(){Id=2, RecommendationId=4}
+                new Variations(){Id=1, Name ="variation1", RecommendationId=1, DynamicContent=""},
+                new Variations(){Id=2, Name ="variation2", RecommendationId=1, DynamicContent=""},
+                new Variations(){Id=12, Name ="variation12", RecommendationId=2, DynamicContent=""},
+                new Variations(){Id=22, Name ="variation22", RecommendationId=2, DynamicContent=""},
+                new Variations(){Id=32, Name ="variation32", RecommendationId=2, DynamicContent=""},
+                new Variations(){Id=13, Name ="variation13", RecommendationId=3, DynamicContent=""},
+                new Variations(){Id=23, Name ="variation23", RecommendationId=3, DynamicContent=""},
+                new Variations(){Id=33, Name ="variation33", RecommendationId=3, DynamicContent=""},
+                new Variations(){Id=43, Name ="variation43", RecommendationId=3, DynamicContent=""},
+                new Variations(){Id=14, Name ="variation14", RecommendationId=4, DynamicContent=""},
+                new Variations(){Id=24, Name ="variation24", RecommendationId=4, DynamicContent=""}
             };
         }
 
